@@ -1,0 +1,16 @@
+# Grafana Dashboard Provisioning Configuration
+# Automatically loads dashboards from the dashboards directory
+
+apiVersion: 1
+
+providers:
+  - name: 'Stratify Dashboards'
+    orgId: 1
+    folder: 'Stratify'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: true

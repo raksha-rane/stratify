@@ -1,0 +1,52 @@
+# Prometheus Configuration for Stratify Trading System
+# This configuration scrapes metrics from all microservices
+
+global:
+  scrape_interval: 15s  # Default scrape interval
+  evaluation_interval: 15s  # Evaluate rules every 15s
+  external_labels:
+    monitor: 'stratify-trading-system'
+    environment: 'development'
+
+# Scrape configurations
+scrape_configs:
+  # Data Service - Market data fetching and validation
+  - job_name: 'data-service'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['data-service:5001']
+        labels:
+          service: 'data-service'
+          component: 'data-ingestion'
+    
+  # Strategy Engine - Trading strategies and backtesting
+  - job_name: 'strategy-engine'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['strategy-engine:5002']
+        labels:
+          service: 'strategy-engine'
+          component: 'trading-engine'
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+          component: 'monitoring'
+
+# Alerting rules (optional - can be expanded later)
+# rule_files:
+#   - '/etc/prometheus/alert.rules.yml'
+
+# Alertmanager configuration (optional)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ['alertmanager:9093']
