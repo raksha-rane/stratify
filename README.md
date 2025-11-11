@@ -446,10 +446,6 @@ Contributions are welcome. Please follow these steps:
 4. Add tests
 5. Submit a pull request
 
-## License
-
-This project is licensed under the MIT License. See the LICENSE file for details.
-
 ## Authors
 
 Developed for educational purposes as part of a DevOps and quantitative finance learning project.
