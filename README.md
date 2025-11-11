@@ -53,7 +53,7 @@ AQUA is an end-to-end automated trading research platform that demonstrates:
 │ (Streamlit) │     │ Engine       │     │  (Flask API)    │
 │   :8501     │     │ (Flask API)  │     │    :5001        │
 └─────────────┘     │   :5002      │     └─────────────────┘
-                    └──────────────┘              │
+                    └──────────────┘               │
                            │                       │
                            └───────────┬───────────┘
                                        │
