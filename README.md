@@ -1,10 +1,9 @@
-# Automated Quantitative Unified Analyst
+# Automated Quantitative Unified Analyst (AQUA)
 
 [![Python](https://img.shields.io/badge/Python-3.11-blue.svg)](https://www.python.org/)
 [![Docker](https://img.shields.io/badge/Docker-ready-brightgreen.svg)](https://www.docker.com/)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A complete DevOps-integrated quantitative trading platform for backtesting algorithmic trading strategies. Built with Python, Flask, Streamlit, PostgreSQL, Docker, and Jenkins.
+A comprehensive DevOps-integrated quantitative trading platform for backtesting algorithmic trading strategies. Built with Python, Flask, Streamlit, PostgreSQL, Docker, and Jenkins.
 
 ## Table of Contents
 
@@ -26,7 +25,7 @@ A complete DevOps-integrated quantitative trading platform for backtesting algor
 
 AQUA is an end-to-end automated trading research platform that demonstrates:
 
-- **Quantitative Finance**: Implementation of popular trading strategies
+- **Quantitative Finance**: Implementation of established trading strategies
 - **Microservices Architecture**: Containerized, scalable services
 - **DevOps Practices**: CI/CD with Jenkins, Docker orchestration
 - **Data Engineering**: ETL pipeline for market data
@@ -34,18 +33,19 @@ AQUA is an end-to-end automated trading research platform that demonstrates:
 
 **Disclaimer**: This platform is for educational and simulation purposes only. No real trades are executed.
 
-## ✨ Features
+## Features
 
-- 📊 **Market Data Ingestion**: Fetch historical data from Yahoo Finance
-- 🤖 **Trading Strategies**: SMA Crossover, Mean Reversion, Momentum
-- 📈 **Backtesting Engine**: Simulate trades with performance metrics
-- 💹 **Performance Metrics**: ROI, Sharpe Ratio, Max Drawdown, Win Rate
-- 🎨 **Interactive Dashboard**: Real-time visualization with Streamlit
-- 🐳 **Containerized Deployment**: Docker Compose orchestration
-- 🔄 **CI/CD Pipeline**: Automated testing and deployment with Jenkins
-- 🗄️ **Database Persistence**: PostgreSQL for data storage
+- **Market Data Ingestion**: Fetch historical data from Yahoo Finance
+- **Trading Strategies**: SMA Crossover, Mean Reversion, Momentum
+- **Backtesting Engine**: Simulate trades with comprehensive performance metrics
+- **Performance Metrics**: ROI, Sharpe Ratio, Max Drawdown, Win Rate
+- **Interactive Dashboard**: Real-time visualization with Streamlit
+- **Containerized Deployment**: Docker Compose orchestration
+- **CI/CD Pipeline**: Automated testing and deployment with Jenkins
+- **Database Persistence**: PostgreSQL for data storage
+- **Monitoring Stack**: Prometheus and Grafana for system observability
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 ┌─────────────┐     ┌──────────────┐     ┌─────────────────┐
@@ -65,7 +65,7 @@ AQUA is an end-to-end automated trading research platform that demonstrates:
                               └─────────────────┘
 ```
 
-## 🔧 Prerequisites
+## Prerequisites
 
 - **Docker**: Version 20.x or higher
 - **Docker Compose**: Version 2.x or higher
@@ -79,12 +79,12 @@ AQUA is an end-to-end automated trading research platform that demonstrates:
 - **Disk Space**: 5GB free space
 - **OS**: Linux, macOS, or Windows with WSL2
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Clone the Repository
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/raksha-rane/aqua.git
 cd aqua
 ```
 
@@ -98,13 +98,14 @@ The easiest way to start everything:
 ```
 
 This automated setup will:
-- ✅ Check prerequisites (Docker, Docker Compose)
-- 🧹 Clean up any existing containers
-- 🔨 Build all Docker images
-- 🌐 Create the necessary network
-- 🚀 Start main services (PostgreSQL, Redis, Data Service, Strategy Engine, Dashboard)
-- 📊 Start monitoring services (Prometheus, Grafana)
-- ❤️ Perform health checks on all services
+
+- Check prerequisites (Docker, Docker Compose)
+- Clean up any existing containers
+- Build all Docker images
+- Create the necessary network
+- Start main services (PostgreSQL, Redis, Data Service, Strategy Engine, Dashboard)
+- Start monitoring services (Prometheus, Grafana)
+- Perform health checks on all services
 
 **Manual Setup (Alternative)**:
 
@@ -122,21 +123,22 @@ docker-compose ps
 ### 3. Access the Dashboard
 
 Open your browser and navigate to:
-- **Dashboard**: http://localhost:8501
-- **Data Service API**: http://localhost:5001/health
-- **Strategy Engine API**: http://localhost:5002/health
-- **Prometheus**: http://localhost:9090
-- **Grafana**: http://localhost:3000 (admin/admin123)
+
+- Dashboard: `http://localhost:8501`
+- Data Service API: `http://localhost:5001/health`
+- Strategy Engine API: `http://localhost:5002/health`
+- Prometheus: `http://localhost:9090`
+- Grafana: `http://localhost:3000` (credentials: admin/admin123)
 
 ### 4. Run Your First Backtest
 
-1. Open the dashboard at http://localhost:8501
-2. Enter a stock ticker (e.g., `AAPL`)
+1. Open the dashboard at `http://localhost:8501`
+2. Enter a stock ticker (e.g., AAPL)
 3. Select date range
 4. Choose a strategy (SMA Crossover recommended for first run)
-5. Click **"Fetch Data"** to download market data
-6. Click **"Run Strategy"** to execute backtest
-7. View results, charts, and metrics!
+5. Click "Fetch Data" to download market data
+6. Click "Run Strategy" to execute backtest
+7. View results, charts, and metrics
 
 ### 5. Stop Services
 
@@ -160,10 +162,9 @@ docker-compose down -v
 docker-compose -f monitoring/docker-compose.monitoring.yml down -v
 ```
 
+## Project Structure
 
-## 📁 Project Structure
-
-```
+```text
 aqua/
 ├── data-service/           # Market data fetching service
 │   ├── app.py             # Flask API for data operations
@@ -171,6 +172,7 @@ aqua/
 │   └── requirements.txt
 ├── strategy-engine/        # Trading strategy execution
 │   ├── app.py             # Strategy implementation and backtesting
+│   ├── risk_manager.py    # Risk management and position sizing
 │   ├── Dockerfile
 │   └── requirements.txt
 ├── dashboard/              # Web interface
@@ -179,27 +181,37 @@ aqua/
 │   └── requirements.txt
 ├── database/               # Database configuration
 │   └── init.sql           # Schema initialization
+├── monitoring/             # Monitoring stack
+│   ├── docker-compose.monitoring.yml
+│   ├── prometheus.yml
+│   └── grafana/
 ├── tests/                  # Test suites
 │   ├── test_strategies.py
 │   ├── test_integration.py
 │   └── requirements.txt
-├── docs/                   # Documentation
+├── common/                 # Shared utilities
+│   ├── logger.py
+│   ├── health.py
+│   └── metrics.py
 ├── docker-compose.yml      # Container orchestration
+├── setup.sh               # Automated setup script
+├── shutdown.sh            # Automated shutdown script
 ├── Jenkinsfile            # CI/CD pipeline definition
-├── SRS.md                 # Software Requirements Specification
 └── README.md              # This file
 ```
 
-## 🔌 Services
+## Services
 
 ### Data Service (Port 5001)
 
 Handles market data operations:
+
 - Fetch data from Yahoo Finance
 - Store in PostgreSQL
 - Serve data to other services
 
 **Endpoints**:
+
 - `GET /health` - Health check
 - `POST /data/fetch` - Fetch and store market data
 - `GET /data/get` - Retrieve stored data
@@ -207,12 +219,14 @@ Handles market data operations:
 ### Strategy Engine (Port 5002)
 
 Executes trading strategies and backtests:
+
 - Implement trading algorithms
 - Calculate signals
 - Run backtests
 - Compute performance metrics
 
 **Endpoints**:
+
 - `GET /health` - Health check
 - `POST /strategy/run` - Execute strategy
 - `GET /results` - List all backtest results
@@ -221,6 +235,7 @@ Executes trading strategies and backtests:
 ### Dashboard (Port 8501)
 
 Interactive web interface:
+
 - Configure parameters
 - Trigger data fetch and strategy runs
 - Visualize results with charts
@@ -229,17 +244,19 @@ Interactive web interface:
 ### PostgreSQL Database (Port 5432)
 
 Stores:
+
 - Market data (OHLCV)
 - Trade signals
 - Backtest results
 
-## 📊 Trading Strategies
+## Trading Strategies
 
 ### 1. SMA Crossover
 
 **Logic**: Buy when short-term SMA crosses above long-term SMA, sell when it crosses below.
 
 **Parameters**:
+
 - `short_window` (default: 20) - Short-term moving average period
 - `long_window` (default: 50) - Long-term moving average period
 
@@ -250,6 +267,7 @@ Stores:
 **Logic**: Buy when price drops below lower Bollinger Band, sell when it rises above upper band.
 
 **Parameters**:
+
 - `window` (default: 20) - Moving average period
 - `num_std` (default: 2) - Number of standard deviations for bands
 
@@ -260,11 +278,12 @@ Stores:
 **Logic**: Go long if recent returns are positive, short if negative.
 
 **Parameters**:
+
 - `lookback` (default: 10) - Number of days to calculate momentum
 
 **Best For**: Strong trending markets
 
-## 🔄 CI/CD Pipeline
+## CI/CD Pipeline
 
 The Jenkins pipeline automates:
 
@@ -277,7 +296,8 @@ The Jenkins pipeline automates:
 
 ### Setting Up Jenkins
 
-1. **Install Jenkins**:
+**Install Jenkins**:
+
 ```bash
 # Using Docker
 docker run -d -p 8080:8080 -p 50000:50000 \
@@ -286,16 +306,18 @@ docker run -d -p 8080:8080 -p 50000:50000 \
   jenkins/jenkins:lts
 ```
 
-2. **Configure Pipeline**:
-   - Create new pipeline job
-   - Point to your repository
-   - Use `Jenkinsfile` from root directory
+**Configure Pipeline**:
 
-3. **Run Pipeline**:
-   - Click "Build Now"
-   - Monitor progress in Console Output
+- Create new pipeline job
+- Point to your repository
+- Use `Jenkinsfile` from root directory
 
-## 📖 API Documentation
+**Run Pipeline**:
+
+- Click "Build Now"
+- Monitor progress in Console Output
+
+## API Documentation
 
 ### Fetch Market Data
 
@@ -333,7 +355,7 @@ curl -X POST http://localhost:5002/strategy/run \
 curl http://localhost:5002/results
 ```
 
-## 🧪 Testing
+## Testing
 
 ### Run Unit Tests
 
@@ -360,7 +382,7 @@ pytest test_integration.py -v
 pytest --cov=. --cov-report=html
 ```
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Services Won't Start
 
@@ -405,17 +427,18 @@ lsof -i :5001  # or 5002, 8501, 5432
 - Ensure Yahoo Finance is accessible
 - Try different date ranges
 
-## 📚 Additional Resources
+## Additional Resources
 
-- [SRS Document](SRS.md) - Complete system specification
+- [Software Requirements Specification](SRS.md) - Complete system specification
+- [Quick Start Guide](QUICKSTART.md) - Quick reference for common operations
 - [Docker Documentation](https://docs.docker.com/)
 - [Flask Documentation](https://flask.palletsprojects.com/)
 - [Streamlit Documentation](https://docs.streamlit.io/)
 - [Jenkins Pipeline](https://www.jenkins.io/doc/book/pipeline/)
 
-## 🤝 Contributing
+## Contributing
 
-Contributions are welcome! Please:
+Contributions are welcome. Please follow these steps:
 
 1. Fork the repository
 2. Create a feature branch
@@ -423,22 +446,20 @@ Contributions are welcome! Please:
 4. Add tests
 5. Submit a pull request
 
-## 📝 License
+## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License. See the LICENSE file for details.
 
 ## Authors
 
-- **Your Name** - Initial work
+Developed for educational purposes as part of a DevOps and quantitative finance learning project.
 
 ## Acknowledgments
 
 - Yahoo Finance for market data API
-- Open source community for amazing tools
-- DevOps best practices from industry leaders
+- Open source community for tools and libraries
+- DevOps best practices from industry standards
 
 ---
-
-**Made with ❤️ for educational purposes**
 
 For questions or issues, please open an issue on GitHub.
