@@ -1,5 +1,3 @@
-version: '3.8'
-
 # Monitoring Stack for Stratify Trading System
 # Includes Prometheus for metrics collection and Grafana for visualization
 # Run alongside main docker-compose.yml
@@ -59,6 +57,7 @@ services:
 
 networks:
   aqts-network:
+    name: stratify_aqts-network
     external: true  # Use existing network from main docker-compose.yml
 
 volumes:

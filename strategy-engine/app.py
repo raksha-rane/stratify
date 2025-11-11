@@ -18,6 +18,7 @@ import requests
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from common.logger import get_logger, set_correlation_id, log_execution_time
 from common.health import HealthCheck
+from common.rate_limiter import RateLimiter, rate_limit
 from common.metrics import (
     initialize_service_metrics,
     service_up,
@@ -40,6 +41,19 @@ logger = get_logger(__name__, service_name='strategy-engine')
 # Initialize Prometheus metrics
 initialize_service_metrics('strategy-engine', version='1.0.0')
 
+# Constants
+MIN_TRADES_FOR_KELLY = 10  # Minimum trades before applying Kelly Criterion
+DEFAULT_STOP_LOSS_PCT = 0.05  # 5% stop loss
+MIN_WINDOW_SIZE = 1
+MAX_WINDOW_SIZE = 200
+MIN_STD_DEV = 0.1
+MAX_STD_DEV = 5.0
+MIN_MOMENTUM_THRESHOLD = 0.001
+MAX_MOMENTUM_THRESHOLD = 1.0
+MIN_STOP_LOSS_PCT = 0.01  # 1%
+MAX_STOP_LOSS_PCT = 0.5   # 50%
+BACKTEST_PAGE_SIZE = 100  # Number of backtest results per page
+
 # Database configuration
 DB_HOST = os.getenv('DB_HOST', 'localhost')
 DB_PORT = os.getenv('DB_PORT', '5432')
@@ -48,7 +62,15 @@ DB_USER = os.getenv('DB_USER', 'postgres')
 DB_PASSWORD = os.getenv('DB_PASSWORD', 'postgres')
 
 DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-engine = create_engine(DATABASE_URL)
+
+# Configure connection pooling for production use
+engine = create_engine(
+    DATABASE_URL,
+    pool_size=10,           # Number of connections to maintain
+    max_overflow=20,        # Additional connections when pool is full
+    pool_pre_ping=True,     # Test connections before using
+    pool_recycle=3600       # Recycle connections after 1 hour
+)
 Base = declarative_base()
 Session = sessionmaker(bind=engine)
 
@@ -184,14 +206,17 @@ class MomentumStrategy(TradingStrategy):
         return self.data
 
 
-def run_backtest(data, initial_capital=10000, enable_risk_management=True):
+def run_backtest(data, initial_capital=10000, enable_risk_management=True, use_kelly=False, enable_stop_loss=True, stop_loss_pct=0.05):
     """
-    Run backtest simulation with realistic transaction costs and risk management.
+    Run backtest on strategy signals with risk management
     
     Args:
         data: DataFrame with columns ['date', 'close', 'signal']
         initial_capital: Starting capital
         enable_risk_management: Whether to apply risk management rules
+        use_kelly: Whether to use Kelly Criterion for position sizing (after 10+ trades)
+        enable_stop_loss: Whether to enable automatic stop-loss
+        stop_loss_pct: Stop loss percentage (e.g., 0.05 for 5%)
     
     Returns:
         Dictionary with backtest results and metrics
@@ -214,10 +239,18 @@ def run_backtest(data, initial_capital=10000, enable_risk_management=True):
     rejected_trades = []
     total_commission = 0.0
     total_slippage = 0.0
+    stop_losses_triggered = 0
+    
+    # Track for Kelly Criterion
+    trade_history = []  # Store completed trades for Kelly calculation
+    entry_prices = {}   # Track entry prices for stop-loss
+    stop_loss_prices = {}  # Track stop-loss levels
     
     logger.info("Starting backtest", extra={
         'initial_capital': initial_capital,
         'enable_risk_management': enable_risk_management,
+        'use_kelly': use_kelly,
+        'enable_stop_loss': enable_stop_loss,
         'data_records': len(data)
     })
     
@@ -230,17 +263,105 @@ def run_backtest(data, initial_capital=10000, enable_risk_management=True):
         for t in portfolio.positions:
             portfolio.position_values[t] = portfolio.positions[t] * current_price
         
+        # Check stop-loss for existing positions
+        if enable_stop_loss and ticker in portfolio.positions and ticker in stop_loss_prices:
+            if current_price <= stop_loss_prices[ticker]:
+                # Stop-loss triggered!
+                shares = portfolio.positions[ticker]
+                
+                logger.info("Stop-loss triggered", extra={
+                    'date': str(row['date']),
+                    'entry_price': entry_prices[ticker],
+                    'stop_price': stop_loss_prices[ticker],
+                    'current_price': current_price,
+                    'shares': shares
+                })
+                
+                # Apply transaction costs
+                costs = risk_mgr.apply_transaction_costs(
+                    price=current_price,
+                    quantity=int(shares),
+                    side='SELL'
+                )
+                
+                # Execute stop-loss exit
+                proceeds = shares * costs.effective_price - costs.total_cost
+                entry_cost = entry_prices[ticker] * shares
+                pnl = proceeds - entry_cost
+                
+                portfolio.cash += proceeds
+                del portfolio.positions[ticker]
+                del portfolio.position_values[ticker]
+                del entry_prices[ticker]
+                del stop_loss_prices[ticker]
+                
+                total_commission += costs.commission
+                total_slippage += costs.slippage
+                stop_losses_triggered += 1
+                
+                trades.append({
+                    'date': row['date'],
+                    'signal': 'STOP_LOSS',
+                    'price': current_price,
+                    'effective_price': costs.effective_price,
+                    'shares': shares,
+                    'proceeds': proceeds,
+                    'commission': costs.commission,
+                    'slippage': costs.slippage,
+                    'portfolio_value': portfolio.total_value,
+                    'pnl': pnl
+                })
+                
+                # Record in trade history for Kelly
+                trade_history.append({
+                    'entry_price': entry_cost / shares,
+                    'exit_price': current_price,
+                    'shares': shares,
+                    'pnl': pnl,
+                    'profit': pnl > 0
+                })
+                
+                equity_curve.append(portfolio.total_value)
+                continue
+        
         # Execute trades based on signals
         if signal == 'BUY' and ticker not in portfolio.positions:
             # Calculate position size
             if enable_risk_management:
-                # Use risk-based position sizing (assuming 5% stop loss)
-                stop_loss_pct = 0.05
-                shares = risk_mgr.calculate_position_size(
-                    capital=portfolio.cash,
-                    price=current_price,
-                    stop_loss_pct=stop_loss_pct
-                )
+                # Use stop loss percentage from parameters
+                
+                # Use Kelly Criterion if we have enough trade history
+                if use_kelly and len(trade_history) >= MIN_TRADES_FOR_KELLY:
+                    wins = [t for t in trade_history if t['profit']]
+                    losses = [t for t in trade_history if not t['profit']]
+                    
+                    win_rate = len(wins) / len(trade_history)
+                    avg_win = np.mean([t['pnl'] for t in wins]) if wins else 0
+                    avg_loss = abs(np.mean([t['pnl'] for t in losses])) if losses else 1
+                    
+                    shares = risk_mgr.calculate_position_size(
+                        capital=portfolio.cash,
+                        price=current_price,
+                        stop_loss_pct=stop_loss_pct,
+                        win_rate=win_rate,
+                        avg_win=avg_win,
+                        avg_loss=avg_loss,
+                        use_kelly=True
+                    )
+                    
+                    logger.debug("Kelly Criterion position sizing", extra={
+                        'win_rate': win_rate,
+                        'avg_win': avg_win,
+                        'avg_loss': avg_loss,
+                        'shares': shares
+                    })
+                else:
+                    # Use risk-based position sizing
+                    shares = risk_mgr.calculate_position_size(
+                        capital=portfolio.cash,
+                        price=current_price,
+                        stop_loss_pct=stop_loss_pct
+                    )
             else:
                 # Use all available capital
                 shares = risk_mgr.get_max_shares_affordable(portfolio.cash, current_price)
@@ -286,6 +407,25 @@ def run_backtest(data, initial_capital=10000, enable_risk_management=True):
                     portfolio.positions[ticker] = shares
                     portfolio.position_values[ticker] = shares * current_price
                     
+                    # Set stop-loss price
+                    if enable_stop_loss:
+                        stop_loss_prices[ticker] = risk_mgr.calculate_stop_loss(
+                            entry_price=current_price,
+                            side='BUY',
+                            fixed_pct=0.05  # 5% stop loss
+                        )
+                        entry_prices[ticker] = current_price
+                    
+                    # Calculate risk-reward ratio (assuming 10% target)
+                    target_price = current_price * 1.10
+                    stop_loss = stop_loss_prices.get(ticker, current_price * 0.95)
+                    risk_reward = risk_mgr.calculate_risk_reward(
+                        entry_price=current_price,
+                        stop_loss=stop_loss,
+                        target_price=target_price,
+                        side='BUY'
+                    )
+                    
                     total_commission += costs.commission
                     total_slippage += costs.slippage
                     
@@ -298,7 +438,10 @@ def run_backtest(data, initial_capital=10000, enable_risk_management=True):
                         'cost': total_cost,
                         'commission': costs.commission,
                         'slippage': costs.slippage,
-                        'portfolio_value': portfolio.total_value
+                        'portfolio_value': portfolio.total_value,
+                        'stop_loss': stop_loss_prices.get(ticker, 0),
+                        'target_price': target_price,
+                        'risk_reward_ratio': risk_reward
                     })
                     
                     logger.debug("BUY executed", extra={
@@ -306,7 +449,9 @@ def run_backtest(data, initial_capital=10000, enable_risk_management=True):
                         'shares': shares,
                         'price': current_price,
                         'effective_price': costs.effective_price,
-                        'total_cost': total_cost
+                        'total_cost': total_cost,
+                        'stop_loss': stop_loss_prices.get(ticker, 0),
+                        'risk_reward_ratio': risk_reward
                     })
         
         elif signal == 'SELL' and ticker in portfolio.positions:
@@ -348,9 +493,19 @@ def run_backtest(data, initial_capital=10000, enable_risk_management=True):
                 # Execute trade
                 proceeds = shares * costs.effective_price - costs.total_cost
                 
+                # Calculate P&L
+                entry_cost = entry_prices.get(ticker, current_price) * shares
+                pnl = proceeds - entry_cost
+                
                 portfolio.cash += proceeds
                 del portfolio.positions[ticker]
                 del portfolio.position_values[ticker]
+                
+                # Clean up stop-loss tracking
+                if ticker in entry_prices:
+                    del entry_prices[ticker]
+                if ticker in stop_loss_prices:
+                    del stop_loss_prices[ticker]
                 
                 total_commission += costs.commission
                 total_slippage += costs.slippage
@@ -364,7 +519,17 @@ def run_backtest(data, initial_capital=10000, enable_risk_management=True):
                     'proceeds': proceeds,
                     'commission': costs.commission,
                     'slippage': costs.slippage,
-                    'portfolio_value': portfolio.total_value
+                    'portfolio_value': portfolio.total_value,
+                    'pnl': pnl
+                })
+                
+                # Record in trade history for Kelly
+                trade_history.append({
+                    'entry_price': entry_cost / shares if shares > 0 else 0,
+                    'exit_price': current_price,
+                    'shares': shares,
+                    'pnl': pnl,
+                    'profit': pnl > 0
                 })
                 
                 logger.debug("SELL executed", extra={
@@ -372,7 +537,8 @@ def run_backtest(data, initial_capital=10000, enable_risk_management=True):
                     'shares': shares,
                     'price': current_price,
                     'effective_price': costs.effective_price,
-                    'proceeds': proceeds
+                    'proceeds': proceeds,
+                    'pnl': pnl
                 })
         
         # Record equity curve
@@ -419,13 +585,31 @@ def run_backtest(data, initial_capital=10000, enable_risk_management=True):
     total_costs = total_commission + total_slippage
     costs_pct = (total_costs / initial_capital) * 100 if initial_capital > 0 else 0
     
+    # Calculate Kelly Criterion statistics
+    kelly_stats = {}
+    if len(trade_history) >= 10:
+        wins = [t for t in trade_history if t['profit']]
+        losses = [t for t in trade_history if not t['profit']]
+        
+        kelly_stats = {
+            'total_completed_trades': len(trade_history),
+            'winning_trades': len(wins),
+            'losing_trades': len(losses),
+            'win_rate': len(wins) / len(trade_history) if trade_history else 0,
+            'avg_win': float(np.mean([t['pnl'] for t in wins])) if wins else 0,
+            'avg_loss': float(abs(np.mean([t['pnl'] for t in losses]))) if losses else 0,
+            'kelly_used': use_kelly
+        }
+    
     logger.info("Backtest completed", extra={
         'final_capital': final_capital,
         'total_return': total_return,
         'total_trades': len(trades),
         'rejected_trades': len(rejected_trades),
+        'stop_losses_triggered': stop_losses_triggered,
         'total_costs': total_costs,
-        'costs_pct': costs_pct
+        'costs_pct': costs_pct,
+        'kelly_stats': kelly_stats
     })
     
     return {
@@ -437,6 +621,7 @@ def run_backtest(data, initial_capital=10000, enable_risk_management=True):
         'win_rate': win_rate,
         'total_trades': len(trades),
         'rejected_trades': len(rejected_trades),
+        'stop_losses_triggered': stop_losses_triggered,
         'equity_curve': equity_curve.tolist(),
         'trades': trades,
         'costs': {
@@ -445,7 +630,8 @@ def run_backtest(data, initial_capital=10000, enable_risk_management=True):
             'total_costs': total_costs,
             'costs_pct': costs_pct
         },
-        'risk_management': risk_mgr.to_dict()
+        'risk_management': risk_mgr.to_dict(),
+        'kelly_criterion': kelly_stats
     }
 
 # Initialize health checker
@@ -453,6 +639,16 @@ health_checker = HealthCheck(
     db_url=DATABASE_URL,
     service_name='strategy-engine'
 )
+
+# Initialize rate limiter
+REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+try:
+    rate_limiter = RateLimiter(redis_url=REDIS_URL)
+    app.rate_limiter = rate_limiter
+    logger.info("Rate limiter initialized")
+except Exception as e:
+    logger.warning("Failed to initialize rate limiter, rate limiting disabled", extra={'error': str(e)})
+    app.rate_limiter = None
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -505,6 +701,7 @@ def metrics():
 
 
 @app.route('/strategy/run', methods=['POST'])
+@rate_limit(calls=10, period=60, resource='strategy_execution')  # Max 10 strategy runs per minute
 @log_execution_time(logger)
 def run_strategy():
     """
@@ -529,6 +726,36 @@ def run_strategy():
         end_date = data.get('end_date', datetime.now().strftime('%Y-%m-%d'))
         parameters = data.get('parameters', {})
         initial_capital = data.get('initial_capital', 10000)
+        
+        # Validate inputs
+        if initial_capital <= 0:
+            return jsonify({'error': 'initial_capital must be positive'}), 400
+        
+        if strategy_name not in ['sma', 'mean_reversion', 'momentum']:
+            return jsonify({'error': f'Invalid strategy: {strategy_name}'}), 400
+        
+        # Validate strategy-specific parameters
+        if strategy_name == 'sma':
+            short_window = parameters.get('short_window', 20)
+            long_window = parameters.get('long_window', 50)
+            if not (MIN_WINDOW_SIZE <= short_window <= MAX_WINDOW_SIZE and MIN_WINDOW_SIZE <= long_window <= MAX_WINDOW_SIZE):
+                return jsonify({'error': f'Window sizes must be between {MIN_WINDOW_SIZE} and {MAX_WINDOW_SIZE}'}), 400
+            if short_window >= long_window:
+                return jsonify({'error': 'short_window must be less than long_window'}), 400
+        elif strategy_name == 'mean_reversion':
+            window = parameters.get('window', 20)
+            std_dev = parameters.get('std_dev', 2.0)
+            if not (MIN_WINDOW_SIZE <= window <= MAX_WINDOW_SIZE):
+                return jsonify({'error': f'Window size must be between {MIN_WINDOW_SIZE} and {MAX_WINDOW_SIZE}'}), 400
+            if not (MIN_STD_DEV <= std_dev <= MAX_STD_DEV):
+                return jsonify({'error': f'std_dev must be between {MIN_STD_DEV} and {MAX_STD_DEV}'}), 400
+        elif strategy_name == 'momentum':
+            window = parameters.get('window', 14)
+            threshold = parameters.get('threshold', 0.02)
+            if not (MIN_WINDOW_SIZE <= window <= MAX_WINDOW_SIZE):
+                return jsonify({'error': f'Window size must be between {MIN_WINDOW_SIZE} and {MAX_WINDOW_SIZE}'}), 400
+            if not (MIN_MOMENTUM_THRESHOLD <= threshold <= MAX_MOMENTUM_THRESHOLD):
+                return jsonify({'error': f'threshold must be between {MIN_MOMENTUM_THRESHOLD} and {MAX_MOMENTUM_THRESHOLD}'}), 400
         
         logger.info("Starting strategy execution", extra={
             'ticker': ticker,
@@ -600,9 +827,27 @@ def run_strategy():
         logger.debug("Calculating trading signals")
         result_df = strategy.calculate_signals()
         
+        # Get advanced parameters
+        use_kelly = data.get('use_kelly', False)
+        enable_stop_loss = data.get('enable_stop_loss', True)
+        stop_loss_pct = data.get('stop_loss_pct', DEFAULT_STOP_LOSS_PCT)
+        
+        # Validate stop loss percentage
+        if not (MIN_STOP_LOSS_PCT <= stop_loss_pct <= MAX_STOP_LOSS_PCT):
+            return jsonify({'error': f'stop_loss_pct must be between {MIN_STOP_LOSS_PCT} ({MIN_STOP_LOSS_PCT*100}%) and {MAX_STOP_LOSS_PCT} ({MAX_STOP_LOSS_PCT*100}%)'}), 400
+        
         # Run backtest
-        logger.debug("Running backtest simulation")
-        backtest_results = run_backtest(result_df, initial_capital)
+        logger.debug("Running backtest simulation", extra={
+            'use_kelly': use_kelly,
+            'enable_stop_loss': enable_stop_loss
+        })
+        backtest_results = run_backtest(
+            result_df, 
+            initial_capital,
+            use_kelly=use_kelly,
+            enable_stop_loss=enable_stop_loss,
+            stop_loss_pct=stop_loss_pct
+        )
         
         logger.info("Backtest completed", extra={
             'ticker': ticker,
@@ -676,7 +921,8 @@ def run_strategy():
                 'max_drawdown': float(backtest_results['max_drawdown']),
                 'win_rate': float(backtest_results['win_rate']),
                 'total_trades': int(backtest_results['total_trades']),
-                'rejected_trades': int(backtest_results.get('rejected_trades', 0))
+                'rejected_trades': int(backtest_results.get('rejected_trades', 0)),
+                'stop_losses_triggered': int(backtest_results.get('stop_losses_triggered', 0))
             },
             'costs': {
                 'total_commission': float(backtest_results.get('costs', {}).get('total_commission', 0)),
@@ -685,6 +931,7 @@ def run_strategy():
                 'costs_pct': float(backtest_results.get('costs', {}).get('costs_pct', 0))
             },
             'risk_management': backtest_results.get('risk_management', {}),
+            'kelly_criterion': backtest_results.get('kelly_criterion', {}),
             'equity_curve': [float(x) for x in backtest_results['equity_curve']],
             'trades': backtest_results['trades'],
             'signals': result_df[['date', 'close', 'signal', 'position']].to_dict('records')
@@ -756,17 +1003,45 @@ def get_results(backtest_id):
 @app.route('/results', methods=['GET'])
 @log_execution_time(logger)
 def list_results():
-    """List all backtest results"""
+    """List backtest results with pagination"""
     correlation_id = request.headers.get('X-Correlation-ID', set_correlation_id())
     
     try:
-        logger.info("Listing backtest results", extra={'correlation_id': correlation_id})
+        # Get pagination parameters
+        page = request.args.get('page', 1, type=int)
+        page_size = request.args.get('page_size', BACKTEST_PAGE_SIZE, type=int)
+        
+        # Validate pagination parameters
+        if page < 1:
+            return jsonify({'error': 'page must be >= 1'}), 400
+        if not (1 <= page_size <= 500):
+            return jsonify({'error': 'page_size must be between 1 and 500'}), 400
+        
+        offset = (page - 1) * page_size
+        
+        logger.info("Listing backtest results", extra={
+            'correlation_id': correlation_id,
+            'page': page,
+            'page_size': page_size
+        })
         
         session = Session()
         try:
-            results = session.query(BacktestResult).order_by(BacktestResult.created_at.desc()).limit(50).all()
+            # Get total count for pagination metadata
+            total_count = session.query(BacktestResult).count()
             
-            logger.info("Backtest results listed", extra={'count': len(results)})
+            # Get paginated results
+            results = session.query(BacktestResult)\
+                .order_by(BacktestResult.created_at.desc())\
+                .limit(page_size)\
+                .offset(offset)\
+                .all()
+            
+            logger.info("Backtest results listed", extra={
+                'count': len(results),
+                'total': total_count,
+                'page': page
+            })
             
             data = [{
                 'id': r.id,
@@ -777,7 +1052,15 @@ def list_results():
                 'created_at': r.created_at.strftime('%Y-%m-%d %H:%M:%S')
             } for r in results]
             
-            return jsonify({'results': data}), 200
+            return jsonify({
+                'results': data,
+                'pagination': {
+                    'page': page,
+                    'page_size': page_size,
+                    'total_count': total_count,
+                    'total_pages': (total_count + page_size - 1) // page_size
+                }
+            }), 200
             
         finally:
             session.close()

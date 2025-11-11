@@ -19,6 +19,14 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
 
   # Redis Cache
   redis:
@@ -34,6 +42,14 @@ services:
       timeout: 5s
       retries: 5
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
 
   # Data Service
   data-service:
@@ -65,8 +81,16 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
       start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
 
   # Strategy Engine
   strategy-engine:
@@ -81,6 +105,7 @@ services:
       DB_USER: postgres
       DB_PASSWORD: postgres
       DATA_SERVICE_URL: http://data-service:5001
+      REDIS_URL: redis://redis:6379/0
       LOG_LEVEL: INFO
       LOG_FORMAT: json
       LOG_SERVICE_NAME: strategy-engine
@@ -88,6 +113,8 @@ services:
       - "5002:5002"
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       data-service:
         condition: service_healthy
@@ -98,8 +125,16 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:5002/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
       start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
 
   # Dashboard
   dashboard:
@@ -121,6 +156,14 @@ services:
     networks:
       - aqts-network
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
 
 networks:
   aqts-network:

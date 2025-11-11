@@ -1,4 +1,4 @@
-# 🚀 AQTS - Automated Quant Trading Strategy Platform
+# Automated Quant Trading Strategy Platform
 
 [![Python](https://img.shields.io/badge/Python-3.11-blue.svg)](https://www.python.org/)
 [![Docker](https://img.shields.io/badge/Docker-ready-brightgreen.svg)](https://www.docker.com/)
@@ -6,7 +6,7 @@
 
 A complete DevOps-integrated quantitative trading platform for backtesting algorithmic trading strategies. Built with Python, Flask, Streamlit, PostgreSQL, Docker, and Jenkins.
 
-## 📋 Table of Contents
+## Table of Contents
 
 - [Overview](#overview)
 - [Features](#features)
@@ -22,7 +22,7 @@ A complete DevOps-integrated quantitative trading platform for backtesting algor
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
 
-## 🎯 Overview
+## Overview
 
 AQTS is an end-to-end automated trading research platform that demonstrates:
 
@@ -32,7 +32,7 @@ AQTS is an end-to-end automated trading research platform that demonstrates:
 - **Data Engineering**: ETL pipeline for market data
 - **Full-Stack Development**: Backend APIs and interactive dashboard
 
-**⚠️ Disclaimer**: This platform is for educational and simulation purposes only. No real trades are executed.
+**Disclaimer**: This platform is for educational and simulation purposes only. No real trades are executed.
 
 ## ✨ Features
 
@@ -394,11 +394,11 @@ Contributions are welcome! Please:
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-## 👥 Authors
+## Authors
 
 - **Your Name** - Initial work
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - Yahoo Finance for market data API
 - Open source community for amazing tools

@@ -44,7 +44,15 @@ DB_USER = os.getenv('DB_USER', 'postgres')
 DB_PASSWORD = os.getenv('DB_PASSWORD', 'postgres')
 
 DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-engine = create_engine(DATABASE_URL)
+
+# Configure connection pooling for production use
+engine = create_engine(
+    DATABASE_URL,
+    pool_size=10,           # Number of connections to maintain
+    max_overflow=20,        # Additional connections when pool is full
+    pool_pre_ping=True,     # Test connections before using
+    pool_recycle=3600       # Recycle connections after 1 hour
+)
 Base = declarative_base()
 Session = sessionmaker(bind=engine)
 
@@ -111,7 +119,7 @@ initialize_service_metrics('data-service', version='1.0.0')
 REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
 
 try:
-    from common.rate_limiter import RateLimiter
+    from common.rate_limiter import RateLimiter, rate_limit
     from request_queue import RequestQueue, RequestPriority
     
     app.rate_limiter = RateLimiter(REDIS_URL)
@@ -126,6 +134,41 @@ except Exception as e:
     })
     app.rate_limiter = None
     request_queue = None
+
+@app.route('/', methods=['GET'])
+def index():
+    """
+    Root endpoint - Service information and available endpoints
+    """
+    return jsonify({
+        'service': 'AQTS Data Service',
+        'version': '1.0.0',
+        'description': 'Fetches and stores stock market data from Yahoo Finance',
+        'status': 'running',
+        'endpoints': {
+            '/': 'GET - Service information (this endpoint)',
+            '/health': 'GET - Health check endpoint',
+            '/metrics': 'GET - Prometheus metrics',
+            '/data/fetch': 'POST - Fetch stock data from Yahoo Finance',
+            '/data/get': 'GET - Retrieve stored stock data',
+            '/queue/status': 'GET - Check request queue status'
+        },
+        'examples': {
+            'fetch_data': {
+                'method': 'POST',
+                'url': '/data/fetch',
+                'body': {
+                    'ticker': 'AAPL',
+                    'start_date': '2023-01-01',
+                    'end_date': '2024-01-01'
+                }
+            },
+            'get_data': {
+                'method': 'GET',
+                'url': '/data/get?ticker=AAPL&start_date=2023-01-01&end_date=2024-01-01'
+            }
+        }
+    }), 200
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -201,6 +244,7 @@ def _fetch_yahoo_finance_data(ticker: str, start_date: str, end_date: str) -> pd
 
 
 @app.route('/data/fetch', methods=['POST'])
+@rate_limit(calls=48, period=60, resource='yfinance')  # Yahoo Finance rate limit
 @handle_errors
 @log_execution_time(logger)
 @track_request_metrics('data-service', '/data/fetch')
@@ -453,7 +497,7 @@ def fetch_data():
 @log_execution_time(logger)
 def get_data():
     """
-    Get stored stock data from database
+    Get stored stock data from database with Redis caching
     Query params: ticker, start_date, end_date
     """
     correlation_id = request.headers.get('X-Correlation-ID', set_correlation_id())
@@ -471,6 +515,24 @@ def get_data():
         raise ValidationError("end_date parameter is required", field="end_date")
     
     ticker = ticker.upper()
+    
+    # Try to get from Redis cache first
+    cache_key = f"market_data:{ticker}:{start_date}:{end_date}"
+    cached_data = None
+    
+    if app.rate_limiter and app.rate_limiter.enabled:
+        try:
+            cached_json = app.rate_limiter.redis_client.get(cache_key)
+            if cached_json:
+                cached_data = json.loads(cached_json)
+                logger.info("Data retrieved from cache", extra={
+                    'ticker': ticker,
+                    'cache_key': cache_key,
+                    'correlation_id': correlation_id
+                })
+                return jsonify(cached_data), 200
+        except Exception as e:
+            logger.warning("Cache retrieval failed", extra={'error': str(e)})
     
     logger.info("Retrieving data from database", extra={
         'ticker': ticker,
@@ -512,11 +574,25 @@ def get_data():
             'records': len(data)
         })
         
-        return jsonify({
+        response_data = {
             'ticker': ticker,
             'records': len(data),
             'data': data
-        }), 200
+        }
+        
+        # Cache the result in Redis (expire after 1 hour)
+        if app.rate_limiter and app.rate_limiter.enabled:
+            try:
+                app.rate_limiter.redis_client.setex(
+                    cache_key,
+                    3600,  # 1 hour TTL
+                    json.dumps(response_data)
+                )
+                logger.debug("Data cached in Redis", extra={'cache_key': cache_key})
+            except Exception as e:
+                logger.warning("Failed to cache data", extra={'error': str(e)})
+        
+        return jsonify(response_data), 200
         
     except (ValidationError, ResourceNotFoundError):
         raise

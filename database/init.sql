@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS data_quality_logs (
     warnings JSONB,
     stats JSONB,
     record_count INTEGER,
-    quality_score INTEGER
+    quality_score INTEGER DEFAULT 0
 );
 
 CREATE INDEX idx_quality_logs_ticker ON data_quality_logs(ticker);

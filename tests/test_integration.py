@@ -27,8 +27,8 @@ class TestDataService:
             response = requests.get(f'{DATA_SERVICE_URL}/health', timeout=5)
             assert response.status_code == 200
             assert response.json()['status'] == 'healthy'
-        except requests.exceptions.RequestException:
-            pytest.skip("Data service not available")
+        except requests.exceptions.RequestException as e:
+            pytest.fail(f"Data service not available: {type(e).__name__} - {str(e)}")
     
     def test_fetch_data(self):
         """Test data fetching"""
@@ -49,8 +49,8 @@ class TestDataService:
             assert data['ticker'] == TEST_TICKER
             assert 'records' in data
             assert data['records'] > 0
-        except requests.exceptions.RequestException:
-            pytest.skip("Data service not available")
+        except requests.exceptions.RequestException as e:
+            pytest.fail(f"Data service not available: {type(e).__name__} - {str(e)}")
     
     def test_get_data(self):
         """Test retrieving stored data"""
@@ -81,8 +81,8 @@ class TestDataService:
             data = response.json()
             assert 'data' in data
             assert len(data['data']) > 0
-        except requests.exceptions.RequestException:
-            pytest.skip("Data service not available")
+        except requests.exceptions.RequestException as e:
+            pytest.fail(f"Data service not available: {type(e).__name__} - {str(e)}")
 
 
 class TestStrategyEngine:
@@ -94,8 +94,8 @@ class TestStrategyEngine:
             response = requests.get(f'{STRATEGY_SERVICE_URL}/health', timeout=5)
             assert response.status_code == 200
             assert response.json()['status'] == 'healthy'
-        except requests.exceptions.RequestException:
-            pytest.skip("Strategy engine not available")
+        except requests.exceptions.RequestException as e:
+            pytest.fail(f"Strategy engine not available: {type(e).__name__} - {str(e)}")
     
     def test_sma_strategy(self):
         """Test SMA strategy execution"""
@@ -134,8 +134,8 @@ class TestStrategyEngine:
             assert 'total_return' in result['metrics']
             assert 'sharpe_ratio' in result['metrics']
             assert 'equity_curve' in result
-        except requests.exceptions.RequestException:
-            pytest.skip("Services not available")
+        except requests.exceptions.RequestException as e:
+            pytest.fail(f"Services not available: {type(e).__name__} - {str(e)}")
     
     def test_mean_reversion_strategy(self):
         """Test mean reversion strategy execution"""
@@ -159,8 +159,8 @@ class TestStrategyEngine:
             assert response.status_code == 200
             result = response.json()
             assert 'metrics' in result
-        except requests.exceptions.RequestException:
-            pytest.skip("Services not available")
+        except requests.exceptions.RequestException as e:
+            pytest.fail(f"Services not available: {type(e).__name__} - {str(e)}")
     
     def test_momentum_strategy(self):
         """Test momentum strategy execution"""
@@ -183,8 +183,8 @@ class TestStrategyEngine:
             assert response.status_code == 200
             result = response.json()
             assert 'metrics' in result
-        except requests.exceptions.RequestException:
-            pytest.skip("Services not available")
+        except requests.exceptions.RequestException as e:
+            pytest.fail(f"Services not available: {type(e).__name__} - {str(e)}")
     
     def test_list_results(self):
         """Test listing backtest results"""
@@ -194,8 +194,8 @@ class TestStrategyEngine:
             assert response.status_code == 200
             data = response.json()
             assert 'results' in data
-        except requests.exceptions.RequestException:
-            pytest.skip("Strategy engine not available")
+        except requests.exceptions.RequestException as e:
+            pytest.fail(f"Strategy engine not available: {type(e).__name__} - {str(e)}")
 
 
 class TestEndToEnd:
@@ -245,8 +245,8 @@ class TestEndToEnd:
             assert list_response.status_code == 200
             assert len(list_response.json()['results']) > 0
             
-        except requests.exceptions.RequestException:
-            pytest.skip("Services not available")
+        except requests.exceptions.RequestException as e:
+            pytest.fail(f"Services not available: {type(e).__name__} - {str(e)}")
 
 
 if __name__ == '__main__':
