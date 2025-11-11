@@ -649,6 +649,45 @@ except Exception as e:
     logger.warning("Failed to initialize rate limiter, rate limiting disabled", extra={'error': str(e)})
     app.rate_limiter = None
 
+@app.route('/', methods=['GET'])
+def index():
+    """
+    Root endpoint - Service information and available endpoints
+    """
+    return jsonify({
+        'service': 'AQUA Strategy Engine',
+        'version': '1.0.0',
+        'description': 'Implements trading strategies and backtesting engine',
+        'status': 'running',
+        'endpoints': {
+            '/': 'GET - Service information (this endpoint)',
+            '/health': 'GET - Health check endpoint',
+            '/metrics': 'GET - Prometheus metrics',
+            '/strategy/run': 'POST - Execute backtest for a trading strategy',
+            '/results': 'GET - List all backtest results (paginated)',
+            '/results/<id>': 'GET - Get specific backtest result by ID'
+        },
+        'available_strategies': [
+            'sma_crossover',
+            'mean_reversion',
+            'momentum'
+        ],
+        'docs': {
+            'strategy_run': {
+                'method': 'POST',
+                'endpoint': '/strategy/run',
+                'parameters': {
+                    'ticker': 'Stock ticker symbol (e.g., AAPL)',
+                    'strategy': 'Strategy name (sma_crossover, mean_reversion, momentum)',
+                    'start_date': 'Start date (YYYY-MM-DD)',
+                    'end_date': 'End date (YYYY-MM-DD)',
+                    'initial_capital': 'Initial capital (default: 10000)',
+                    'parameters': 'Strategy-specific parameters (optional)'
+                }
+            }
+        }
+    }), 200
+
 @app.route('/health', methods=['GET'])
 def health_check():
     """
