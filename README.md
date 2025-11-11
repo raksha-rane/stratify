@@ -1,4 +1,4 @@
-# Automated Quant Trading Strategy Platform
+# Automated Quantitative Unified Analyst
 
 [![Python](https://img.shields.io/badge/Python-3.11-blue.svg)](https://www.python.org/)
 [![Docker](https://img.shields.io/badge/Docker-ready-brightgreen.svg)](https://www.docker.com/)
@@ -24,7 +24,7 @@ A complete DevOps-integrated quantitative trading platform for backtesting algor
 
 ## Overview
 
-AQTS is an end-to-end automated trading research platform that demonstrates:
+AQUA is an end-to-end automated trading research platform that demonstrates:
 
 - **Quantitative Finance**: Implementation of popular trading strategies
 - **Microservices Architecture**: Containerized, scalable services
@@ -85,20 +85,38 @@ AQTS is an end-to-end automated trading research platform that demonstrates:
 
 ```bash
 git clone <your-repo-url>
-cd stratify
+cd aqua
 ```
 
-### 2. Start All Services
+### 2. Start All Services (Automated Setup)
+
+The easiest way to start everything:
 
 ```bash
-# Build and start all containers
+# Build and start all services (main + monitoring)
+./setup.sh
+```
+
+This automated setup will:
+- ✅ Check prerequisites (Docker, Docker Compose)
+- 🧹 Clean up any existing containers
+- 🔨 Build all Docker images
+- 🌐 Create the necessary network
+- 🚀 Start main services (PostgreSQL, Redis, Data Service, Strategy Engine, Dashboard)
+- 📊 Start monitoring services (Prometheus, Grafana)
+- ❤️ Perform health checks on all services
+
+**Manual Setup (Alternative)**:
+
+```bash
+# Start main services first (creates the network)
 docker-compose up -d
+
+# Then start monitoring services
+docker-compose -f monitoring/docker-compose.monitoring.yml up -d
 
 # Check container status
 docker-compose ps
-
-# View logs
-docker-compose logs -f
 ```
 
 ### 3. Access the Dashboard
@@ -107,6 +125,8 @@ Open your browser and navigate to:
 - **Dashboard**: http://localhost:8501
 - **Data Service API**: http://localhost:5001/health
 - **Strategy Engine API**: http://localhost:5002/health
+- **Prometheus**: http://localhost:9090
+- **Grafana**: http://localhost:3000 (admin/admin123)
 
 ### 4. Run Your First Backtest
 
@@ -121,17 +141,30 @@ Open your browser and navigate to:
 ### 5. Stop Services
 
 ```bash
+# Stop all services (main + monitoring)
+./shutdown.sh
+
+# Stop and remove all data (clean slate)
+./shutdown.sh --volumes
+```
+
+**Manual Shutdown (Alternative)**:
+
+```bash
 # Stop all containers
 docker-compose down
+docker-compose -f monitoring/docker-compose.monitoring.yml down
 
-# Stop and remove volumes (clean slate)
+# Stop and remove volumes
 docker-compose down -v
+docker-compose -f monitoring/docker-compose.monitoring.yml down -v
 ```
+
 
 ## 📁 Project Structure
 
 ```
-stratify/
+aqua/
 ├── data-service/           # Market data fetching service
 │   ├── app.py             # Flask API for data operations
 │   ├── Dockerfile
@@ -350,7 +383,7 @@ docker-compose restart
 docker-compose ps postgres
 
 # Access database directly
-docker exec -it aqts-postgres psql -U postgres -d aqts_db
+docker exec -it aqua-postgres psql -U postgres -d aqua_db
 
 # Verify tables
 \dt

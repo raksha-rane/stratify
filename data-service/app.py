@@ -39,7 +39,7 @@ logger = get_logger(__name__, service_name='data-service')
 # Database configuration
 DB_HOST = os.getenv('DB_HOST', 'localhost')
 DB_PORT = os.getenv('DB_PORT', '5432')
-DB_NAME = os.getenv('DB_NAME', 'aqts_db')
+DB_NAME = os.getenv('DB_NAME', 'aqua_db')
 DB_USER = os.getenv('DB_USER', 'postgres')
 DB_PASSWORD = os.getenv('DB_PASSWORD', 'postgres')
 
@@ -141,7 +141,7 @@ def index():
     Root endpoint - Service information and available endpoints
     """
     return jsonify({
-        'service': 'AQTS Data Service',
+        'service': 'AQUA Data Service',
         'version': '1.0.0',
         'description': 'Fetches and stores stock market data from Yahoo Finance',
         'status': 'running',

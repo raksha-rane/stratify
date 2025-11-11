@@ -1,5 +1,5 @@
 """
-Integration Tests for AQTS
+Integration Tests for AQUA
 Tests end-to-end functionality
 """
 import pytest

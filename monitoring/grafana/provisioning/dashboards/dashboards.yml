@@ -4,9 +4,9 @@
 apiVersion: 1
 
 providers:
-  - name: 'Stratify Dashboards'
+  - name: 'AQUA Dashboards'
     orgId: 1
-    folder: 'Stratify'
+    folder: 'AQUA'
     type: file
     disableDeletion: false
     updateIntervalSeconds: 30

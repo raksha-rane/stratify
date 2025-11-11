@@ -1,11 +1,11 @@
-# Prometheus Configuration for Stratify Trading System
+# Prometheus Configuration for AQUA Trading System
 # This configuration scrapes metrics from all microservices
 
 global:
   scrape_interval: 15s  # Default scrape interval
   evaluation_interval: 15s  # Evaluate rules every 15s
   external_labels:
-    monitor: 'stratify-trading-system'
+    monitor: 'aqua-trading-system'
     environment: 'development'
 
 # Scrape configurations

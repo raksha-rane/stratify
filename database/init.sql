@@ -1,4 +1,4 @@
--- Initialize AQTS Database Schema
+-- Initialize AQUA Database Schema
 
 -- Create market_data table
 CREATE TABLE IF NOT EXISTS market_data (

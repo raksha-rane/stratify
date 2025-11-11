@@ -1,5 +1,5 @@
 """
-Data Validation Module for AQTS Platform
+Data Validation Module for AQUA Platform
 
 This module provides comprehensive data quality validation for OHLCV (Open, High, Low, Close, Volume) data.
 Validates data integrity, detects anomalies, and generates quality reports.

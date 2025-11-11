@@ -1,5 +1,5 @@
 """
-Risk Management Module for AQTS Platform
+Risk Management Module for AQUA Platform
 
 This module provides comprehensive risk management functionality including:
 - Position sizing using Kelly Criterion

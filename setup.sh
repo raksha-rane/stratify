@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# AQTS Setup Script
-# This script sets up the AQTS platform
+# AQUA Setup Script
+# This script sets up the AQUA platform
 
 set -e
 
-echo "AQTS Platform Setup"
+echo "AQUA Platform Setup"
 echo "======================"
 echo ""
 
@@ -35,6 +35,13 @@ fi
 echo "✅ Docker daemon is running"
 echo ""
 
+# Clean up existing containers and networks if any
+echo "🧹 Cleaning up any existing containers..."
+docker-compose down -v 2>/dev/null || true
+docker-compose -f monitoring/docker-compose.monitoring.yml down -v 2>/dev/null || true
+
+echo ""
+
 # Build images
 echo "🔨 Building Docker images..."
 docker-compose build --no-cache
@@ -43,22 +50,37 @@ echo ""
 echo "✅ Images built successfully"
 echo ""
 
-# Start services
-echo "Starting services..."
+# Create network explicitly (if it doesn't exist)
+echo "🌐 Creating Docker network..."
+docker network create aqua-network 2>/dev/null || echo "   Network already exists, continuing..."
+
+echo ""
+
+# Start main services (this will use the existing network)
+echo "🚀 Starting main services..."
 docker-compose up -d
 
 echo ""
-echo "Waiting for services to be ready..."
+echo "⏳ Waiting for main services to be healthy..."
 sleep 15
 
-# Start monitoring stack
+# Verify main services are running
+echo "   Checking service status..."
+docker-compose ps
+
 echo ""
-echo "Starting monitoring services (Prometheus & Grafana)..."
+
+# Start monitoring stack
+echo "📊 Starting monitoring services (Prometheus & Grafana)..."
 docker-compose -f monitoring/docker-compose.monitoring.yml up -d
 
 echo ""
-echo "Waiting for monitoring services to be ready..."
+echo "⏳ Waiting for monitoring services to be ready..."
 sleep 10
+
+# Verify monitoring services are running
+echo "   Checking monitoring status..."
+docker-compose -f monitoring/docker-compose.monitoring.yml ps
 
 # Health checks
 echo ""
@@ -96,7 +118,7 @@ fi
 
 echo ""
 echo "================================================"
-echo " AQTS Platform is ready!"
+echo " AQUA Platform is ready!"
 echo "================================================"
 echo ""
 echo "Access the services:"
@@ -111,8 +133,12 @@ echo "   Credentials:      Set in docker-compose.yml (SECURITY: Change default p
 echo ""
 echo "To view logs:"
 echo "  docker-compose logs -f"
+echo "  docker-compose -f monitoring/docker-compose.monitoring.yml logs -f"
 echo ""
-echo "To stop services:"
-echo "  docker-compose down"
+echo "To stop all services:"
+echo "  docker-compose down && docker-compose -f monitoring/docker-compose.monitoring.yml down"
+echo ""
+echo "To stop and remove volumes:"
+echo "  docker-compose down -v && docker-compose -f monitoring/docker-compose.monitoring.yml down -v"
 echo ""
 echo "Happy trading! 📈"

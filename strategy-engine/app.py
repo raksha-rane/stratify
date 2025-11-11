@@ -57,7 +57,7 @@ BACKTEST_PAGE_SIZE = 100  # Number of backtest results per page
 # Database configuration
 DB_HOST = os.getenv('DB_HOST', 'localhost')
 DB_PORT = os.getenv('DB_PORT', '5432')
-DB_NAME = os.getenv('DB_NAME', 'aqts_db')
+DB_NAME = os.getenv('DB_NAME', 'aqua_db')
 DB_USER = os.getenv('DB_USER', 'postgres')
 DB_PASSWORD = os.getenv('DB_PASSWORD', 'postgres')
 
@@ -586,20 +586,19 @@ def run_backtest(data, initial_capital=10000, enable_risk_management=True, use_k
     costs_pct = (total_costs / initial_capital) * 100 if initial_capital > 0 else 0
     
     # Calculate Kelly Criterion statistics
-    kelly_stats = {}
-    if len(trade_history) >= 10:
-        wins = [t for t in trade_history if t['profit']]
-        losses = [t for t in trade_history if not t['profit']]
-        
-        kelly_stats = {
-            'total_completed_trades': len(trade_history),
-            'winning_trades': len(wins),
-            'losing_trades': len(losses),
-            'win_rate': len(wins) / len(trade_history) if trade_history else 0,
-            'avg_win': float(np.mean([t['pnl'] for t in wins])) if wins else 0,
-            'avg_loss': float(abs(np.mean([t['pnl'] for t in losses]))) if losses else 0,
-            'kelly_used': use_kelly
-        }
+    # Always return stats when use_kelly is True, even if not enough trades yet
+    wins = [t for t in trade_history if t['profit']] if trade_history else []
+    losses = [t for t in trade_history if not t['profit']] if trade_history else []
+    
+    kelly_stats = {
+        'total_completed_trades': len(trade_history),
+        'winning_trades': len(wins),
+        'losing_trades': len(losses),
+        'win_rate': len(wins) / len(trade_history) if trade_history else 0,
+        'avg_win': float(np.mean([t['pnl'] for t in wins])) if wins else 0,
+        'avg_loss': float(abs(np.mean([t['pnl'] for t in losses]))) if losses else 0,
+        'kelly_used': use_kelly and len(trade_history) >= 10  # Only true if actually used
+    }
     
     logger.info("Backtest completed", extra={
         'final_capital': final_capital,

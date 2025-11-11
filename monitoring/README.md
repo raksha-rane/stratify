@@ -1,6 +1,6 @@
-# Stratify Monitoring Stack
+# StraAQUAtify Monitoring Stack
 
-This directory contains the monitoring infrastructure for the Stratify Trading System using Prometheus and Grafana.
+This directory contains the monitoring infrastructure for the AQUA using Prometheus and Grafana.
 
 ## Architecture
 
@@ -76,7 +76,7 @@ docker-compose -f docker-compose.monitoring.yml up -d
 
 ## Dashboards
 
-### Stratify Trading System - Overview
+### AQUA - Overview
 Pre-configured dashboard with:
 - Total request rate
 - 95th percentile latency
@@ -139,7 +139,7 @@ docker-compose -f docker-compose.monitoring.yml down -v
 
 2. Verify network connectivity:
    ```bash
-   docker exec stratify-prometheus wget -O- http://data-service:5001/metrics
+   docker exec aqua-prometheus wget -O- http://data-service:5001/metrics
    ```
 
 3. Check Prometheus targets: http://localhost:9090/targets
@@ -149,10 +149,10 @@ docker-compose -f docker-compose.monitoring.yml down -v
 1. Verify datasource: Grafana → Configuration → Data Sources
 2. Check dashboard provisioning logs:
    ```bash
-   docker logs stratify-grafana
+   docker logs aqua-grafana
    ```
 
-3. Manually import dashboard from `grafana/dashboards/stratify-overview.json`
+3. Manually import dashboard from `grafana/dashboards/aqua-overview.json`
 
 ### No metrics appearing
 

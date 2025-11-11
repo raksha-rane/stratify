@@ -2,9 +2,9 @@ services:
   # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
-    container_name: aqts-postgres
+    container_name: aqua-postgres
     environment:
-      POSTGRES_DB: aqts_db
+      POSTGRES_DB: aqua_db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
@@ -13,7 +13,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
-      - aqts-network
+      - aqua-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -31,11 +31,11 @@ services:
   # Redis Cache
   redis:
     image: redis:7-alpine
-    container_name: aqts-redis
+    container_name: aqua-redis
     ports:
       - "6379:6379"
     networks:
-      - aqts-network
+      - aqua-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -56,11 +56,11 @@ services:
     build:
       context: .
       dockerfile: ./data-service/Dockerfile
-    container_name: aqts-data-service
+    container_name: aqua-data-service
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_NAME: aqts_db
+      DB_NAME: aqua_db
       DB_USER: postgres
       DB_PASSWORD: postgres
       REDIS_URL: redis://redis:6379/0
@@ -75,7 +75,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - aqts-network
+      - aqua-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
@@ -97,11 +97,11 @@ services:
     build:
       context: .
       dockerfile: ./strategy-engine/Dockerfile
-    container_name: aqts-strategy-engine
+    container_name: aqua-strategy-engine
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_NAME: aqts_db
+      DB_NAME: aqua_db
       DB_USER: postgres
       DB_PASSWORD: postgres
       DATA_SERVICE_URL: http://data-service:5001
@@ -119,7 +119,7 @@ services:
       data-service:
         condition: service_healthy
     networks:
-      - aqts-network
+      - aqua-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5002/health"]
@@ -141,7 +141,7 @@ services:
     build:
       context: .
       dockerfile: ./dashboard/Dockerfile
-    container_name: aqts-dashboard
+    container_name: aqua-dashboard
     environment:
       DATA_SERVICE_URL: http://data-service:5001
       STRATEGY_SERVICE_URL: http://strategy-engine:5002
@@ -154,7 +154,7 @@ services:
       - data-service
       - strategy-engine
     networks:
-      - aqts-network
+      - aqua-network
     restart: unless-stopped
     deploy:
       resources:
@@ -166,7 +166,7 @@ services:
           memory: 256M
 
 networks:
-  aqts-network:
+  aqua-network:
     driver: bridge
 
 volumes:

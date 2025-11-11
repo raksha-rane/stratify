@@ -1,15 +1,19 @@
 """
-Streamlit Dashboard for AQTS
+Streamlit Dashboard for AQUA
 Interactive visualization and control interface
 """
 import streamlit as st
 import requests
 import pandas as pd
+import numpy as np
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 import json
 import os
 import sys
+from pathlib import Path
+from PIL import Image
 
 # Add parent directory to path for common module imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -28,9 +32,17 @@ logger.info("Dashboard starting", extra={
     'strategy_service_url': STRATEGY_SERVICE_URL
 })
 
+# Load custom page icon
+icon_path = Path(__file__).parent / "static" / "stock.png"
+try:
+    page_icon = Image.open(icon_path)
+except Exception as e:
+    logger.warning(f"Could not load custom icon: {e}")
+    page_icon = "📈"  # Fallback to emoji
+
 st.set_page_config(
-    page_title="AQTS - Automated Quant Trading Strategy",
-    page_icon="📈",
+    page_title="AQUA - Automated Quantitative Unified Analyst",
+    page_icon=page_icon,
     layout="wide"
 )
 
@@ -38,11 +50,20 @@ st.set_page_config(
 st.markdown("""
 <style>
     .main-header {
-        font-size: 2.5rem;
-        font-weight: bold;
+        font-size: 3.5rem;
+        font-weight: 800;
         color: #1f77b4;
         text-align: center;
-        margin-bottom: 1rem;
+        margin-bottom: 0.2rem;
+        letter-spacing: 0.1em;
+    }
+    .sub-header {
+        font-size: 1.1rem;
+        font-weight: 400;
+        color: #555;
+        text-align: center;
+        margin-bottom: 1.5rem;
+        font-style: italic;
     }
     .metric-card {
         background-color: #f0f2f6;
@@ -54,7 +75,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Title
-st.markdown('<div class="main-header">Automated Quant Trading Strategy Platform</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">AQUA</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Automated Quantitative Unified Analyst</div>', unsafe_allow_html=True)
 st.markdown("---")
 
 # Sidebar configuration
@@ -302,7 +324,7 @@ with col2:
     run_strategy_btn = st.button("Run Strategy", use_container_width=True, disabled=(ticker is None))
 
 # Main content area
-tab1, tab2, tab3 = st.tabs(["Dashboard", "Results", "History"])
+tab1, tab2, tab3, tab4 = st.tabs(["Overview", "Advanced Analytics", "Detailed Results", "History"])
 
 # Fetch Data
 if fetch_data_btn:
@@ -572,10 +594,16 @@ with tab1:
                     st.write(f"- Trades Rejected: {rejected}")
                     st.write(f"- Acceptance Rate: {acceptance_rate:.1f}%")
         
-        # Kelly Criterion Statistics (only show if enabled)
-        if use_kelly and 'kelly_criterion' in result and result['kelly_criterion']:
-            with st.expander("Kelly Criterion Statistics"):
-                kelly = result['kelly_criterion']
+        # Kelly Criterion Statistics (show if enabled)
+        if use_kelly:
+            st.markdown("---")
+            st.subheader("Kelly Criterion Position Sizing")
+            
+            kelly = result.get('kelly_criterion', {})
+            
+            if kelly and kelly.get('total_completed_trades', 0) >= 10:
+                # Kelly was used - show full statistics
+                st.success("**Kelly Criterion is ACTIVE** - Position sizes optimized based on historical performance")
                 
                 col1, col2, col3 = st.columns(3)
                 with col1:
@@ -588,10 +616,51 @@ with tab1:
                     st.metric("Losing Trades", kelly.get('losing_trades', 0))
                     st.metric("Avg Loss", f"${kelly.get('avg_loss', 0):.2f}")
                 
-                if kelly.get('kelly_used', False):
-                    st.success("✅ Kelly Criterion was used for position sizing")
-                else:
-                    st.info("ℹ️ Fixed fractional position sizing used (need 10+ trades for Kelly)")
+                # Calculate and display Kelly percentage
+                win_rate = kelly.get('win_rate', 0)
+                avg_win = kelly.get('avg_win', 0)
+                avg_loss = abs(kelly.get('avg_loss', 0))
+                
+                if avg_loss > 0:
+                    win_loss_ratio = avg_win / avg_loss
+                    kelly_pct = (win_rate * win_loss_ratio - (1 - win_rate)) / win_loss_ratio
+                    kelly_pct = max(0, min(kelly_pct, 1))  # Clamp between 0 and 1
+                    
+                    st.info(f"""
+                    **Kelly Formula Applied:**
+                    - Win/Loss Ratio: {win_loss_ratio:.2f}
+                    - Optimal Position Size: {kelly_pct*100:.1f}% of capital per trade
+                    - Position sizing is dynamically adjusted based on this calculation
+                    """)
+            else:
+                # Not enough trades yet - using fixed fractional
+                completed_trades = kelly.get('total_completed_trades', 0)
+                remaining = 10 - completed_trades
+                
+                st.warning(f"""
+                ⏳ **Kelly Criterion is ENABLED but not yet active**
+                
+                **Status:** Using fixed fractional position sizing (20% of capital)
+                
+                **Reason:** Need at least 10 completed trade pairs to calculate Kelly statistics
+                
+                **Current Progress:** {completed_trades}/10 completed trades
+                
+                **What happens next:** Once you have {remaining} more completed trade(s), 
+                the system will automatically switch to Kelly Criterion for optimal position sizing.
+                """)
+                
+                if completed_trades > 0:
+                    st.write("**Trades so far:**")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric("Completed Trades", completed_trades)
+                        st.metric("Winning Trades", kelly.get('winning_trades', 0))
+                    with col2:
+                        st.metric("Losing Trades", kelly.get('losing_trades', 0))
+                        if completed_trades > 0:
+                            current_win_rate = kelly.get('winning_trades', 0) / completed_trades * 100
+                            st.metric("Current Win Rate", f"{current_win_rate:.1f}%")
         
         st.markdown("---")
         
@@ -609,14 +678,17 @@ with tab1:
             y=equity_df['Portfolio Value'],
             mode='lines',
             name='Portfolio Value',
-            line=dict(color='#1f77b4', width=2)
+            line=dict(color='#1f77b4', width=2),
+            fill='tonexty',
+            fillcolor='rgba(31, 119, 180, 0.1)'
         ))
         
         fig.add_hline(
             y=initial_capital,
             line_dash="dash",
             line_color="red",
-            annotation_text="Initial Capital"
+            annotation_text="Initial Capital",
+            line_width=2
         )
         
         fig.update_layout(
@@ -624,16 +696,577 @@ with tab1:
             xaxis_title="Trading Days",
             yaxis_title="Portfolio Value ($)",
             hovermode='x unified',
-            height=400
+            height=400,
+            template="plotly_white"
         )
         
         st.plotly_chart(fig, use_container_width=True)
         
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Drawdown Chart
+        st.subheader("Drawdown Analysis")
+        
+        equity_curve_np = np.array(result['equity_curve'])
+        cumulative_max = np.maximum.accumulate(equity_curve_np)
+        drawdown = ((equity_curve_np - cumulative_max) / cumulative_max) * 100
+        
+        fig_dd = go.Figure()
+        fig_dd.add_trace(go.Scatter(
+            x=list(range(len(drawdown))),
+            y=drawdown,
+            mode='lines',
+            name='Drawdown',
+            line=dict(color='red', width=2),
+            fill='tozeroy',
+            fillcolor='rgba(255, 0, 0, 0.2)'
+        ))
+        
+        fig_dd.add_hline(
+            y=metrics['max_drawdown'],
+            line_dash="dash",
+            line_color="darkred",
+            annotation_text=f"Max Drawdown: {metrics['max_drawdown']:.2f}%",
+            line_width=2
+        )
+        
+        fig_dd.update_layout(
+            title="Portfolio Drawdown Over Time",
+            xaxis_title="Trading Days",
+            yaxis_title="Drawdown (%)",
+            hovermode='x unified',
+            height=300,
+            template="plotly_white"
+        )
+        
+        st.plotly_chart(fig_dd, use_container_width=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Cumulative Returns Comparison (Strategy vs Buy-and-Hold)
+        st.subheader("Strategy vs Buy-and-Hold Comparison")
+        
+        signals_df = pd.DataFrame(result['signals'])
+        if not signals_df.empty and 'close' in signals_df.columns:
+            # Calculate buy-and-hold returns
+            initial_price = signals_df['close'].iloc[0]
+            buy_hold_values = (signals_df['close'] / initial_price) * initial_capital
+            
+            # Calculate strategy returns
+            strategy_returns = [(val / initial_capital - 1) * 100 for val in result['equity_curve']]
+            buy_hold_returns = [(val / initial_capital - 1) * 100 for val in buy_hold_values]
+            
+            fig_comp = go.Figure()
+            
+            fig_comp.add_trace(go.Scatter(
+                x=list(range(len(strategy_returns))),
+                y=strategy_returns,
+                mode='lines',
+                name='Strategy',
+                line=dict(color='#1f77b4', width=2)
+            ))
+            
+            fig_comp.add_trace(go.Scatter(
+                x=list(range(len(buy_hold_returns))),
+                y=buy_hold_returns,
+                mode='lines',
+                name='Buy & Hold',
+                line=dict(color='orange', width=2, dash='dash')
+            ))
+            
+            fig_comp.update_layout(
+                title=f"Cumulative Returns: Strategy vs Buy-and-Hold ({ticker})",
+                xaxis_title="Trading Days",
+                yaxis_title="Cumulative Return (%)",
+                hovermode='x unified',
+                height=400,
+                template="plotly_white",
+                legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
+            )
+            
+            st.plotly_chart(fig_comp, use_container_width=True)
+            
+            # Show comparison metrics
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                strategy_final = strategy_returns[-1] if strategy_returns else 0
+                st.metric("Strategy Return", f"{strategy_final:.2f}%")
+            with col2:
+                buy_hold_final = buy_hold_returns[-1] if buy_hold_returns else 0
+                st.metric("Buy & Hold Return", f"{buy_hold_final:.2f}%")
+            with col3:
+                outperformance = strategy_final - buy_hold_final
+                st.metric("Outperformance", f"{outperformance:.2f}%", 
+                         delta=f"{outperformance:.2f}%")
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
     else:
         st.info("Configure parameters in the sidebar and click 'Run Strategy' to see results.")
 
-# Results Tab
+# Advanced Analytics Tab
 with tab2:
+    st.header("Advanced Analytics")
+    
+    if 'backtest_result' in st.session_state:
+        result = st.session_state['backtest_result']
+        metrics = result['metrics']
+        signals_df = pd.DataFrame(result['signals'])
+        signals_df['date'] = pd.to_datetime(signals_df['date'])
+        
+        # Strategy Indicator Visualization
+        st.subheader("Strategy Indicators")
+        
+        if strategy == "sma":
+            # SMA Crossover Strategy
+            short_window = parameters.get('short_window', 20)
+            long_window = parameters.get('long_window', 50)
+            
+            # Calculate SMAs
+            signals_df['sma_short'] = signals_df['close'].rolling(window=short_window).mean()
+            signals_df['sma_long'] = signals_df['close'].rolling(window=long_window).mean()
+            
+            fig_ind = go.Figure()
+            
+            # Price
+            fig_ind.add_trace(go.Scatter(
+                x=signals_df['date'],
+                y=signals_df['close'],
+                mode='lines',
+                name='Close Price',
+                line=dict(color='black', width=2)
+            ))
+            
+            # Short SMA
+            fig_ind.add_trace(go.Scatter(
+                x=signals_df['date'],
+                y=signals_df['sma_short'],
+                mode='lines',
+                name=f'SMA {short_window}',
+                line=dict(color='blue', width=1.5)
+            ))
+            
+            # Long SMA
+            fig_ind.add_trace(go.Scatter(
+                x=signals_df['date'],
+                y=signals_df['sma_long'],
+                mode='lines',
+                name=f'SMA {long_window}',
+                line=dict(color='orange', width=1.5)
+            ))
+            
+            # Buy signals
+            buy_signals = signals_df[signals_df['signal'] == 'BUY']
+            if not buy_signals.empty:
+                fig_ind.add_trace(go.Scatter(
+                    x=buy_signals['date'],
+                    y=buy_signals['close'],
+                    mode='markers',
+                    name='Buy Signal',
+                    marker=dict(color='green', size=12, symbol='triangle-up')
+                ))
+            
+            # Sell signals
+            sell_signals = signals_df[signals_df['signal'] == 'SELL']
+            if not sell_signals.empty:
+                fig_ind.add_trace(go.Scatter(
+                    x=sell_signals['date'],
+                    y=sell_signals['close'],
+                    mode='markers',
+                    name='Sell Signal',
+                    marker=dict(color='red', size=12, symbol='triangle-down')
+                ))
+            
+            fig_ind.update_layout(
+                title=f"SMA Crossover Strategy ({short_window}/{long_window})",
+                xaxis_title="Date",
+                yaxis_title="Price ($)",
+                hovermode='x unified',
+                height=500,
+                template="plotly_white"
+            )
+            
+            st.plotly_chart(fig_ind, use_container_width=True)
+            
+        elif strategy == "mean_reversion":
+            # Mean Reversion Strategy
+            window = parameters.get('window', 20)
+            num_std = parameters.get('num_std', 2.0)
+            
+            # Calculate bands
+            signals_df['ma'] = signals_df['close'].rolling(window=window).mean()
+            signals_df['std'] = signals_df['close'].rolling(window=window).std()
+            signals_df['upper_band'] = signals_df['ma'] + (signals_df['std'] * num_std)
+            signals_df['lower_band'] = signals_df['ma'] - (signals_df['std'] * num_std)
+            
+            fig_ind = go.Figure()
+            
+            # Upper band
+            fig_ind.add_trace(go.Scatter(
+                x=signals_df['date'],
+                y=signals_df['upper_band'],
+                mode='lines',
+                name='Upper Band',
+                line=dict(color='red', width=1, dash='dash')
+            ))
+            
+            # Moving average
+            fig_ind.add_trace(go.Scatter(
+                x=signals_df['date'],
+                y=signals_df['ma'],
+                mode='lines',
+                name=f'MA {window}',
+                line=dict(color='blue', width=2)
+            ))
+            
+            # Lower band
+            fig_ind.add_trace(go.Scatter(
+                x=signals_df['date'],
+                y=signals_df['lower_band'],
+                mode='lines',
+                name='Lower Band',
+                line=dict(color='green', width=1, dash='dash')
+            ))
+            
+            # Price
+            fig_ind.add_trace(go.Scatter(
+                x=signals_df['date'],
+                y=signals_df['close'],
+                mode='lines',
+                name='Close Price',
+                line=dict(color='black', width=2)
+            ))
+            
+            # Buy signals
+            buy_signals = signals_df[signals_df['signal'] == 'BUY']
+            if not buy_signals.empty:
+                fig_ind.add_trace(go.Scatter(
+                    x=buy_signals['date'],
+                    y=buy_signals['close'],
+                    mode='markers',
+                    name='Buy Signal',
+                    marker=dict(color='green', size=12, symbol='triangle-up')
+                ))
+            
+            # Sell signals
+            sell_signals = signals_df[signals_df['signal'] == 'SELL']
+            if not sell_signals.empty:
+                fig_ind.add_trace(go.Scatter(
+                    x=sell_signals['date'],
+                    y=sell_signals['close'],
+                    mode='markers',
+                    name='Sell Signal',
+                    marker=dict(color='red', size=12, symbol='triangle-down')
+                ))
+            
+            fig_ind.update_layout(
+                title=f"Mean Reversion Strategy (±{num_std}σ Bands)",
+                xaxis_title="Date",
+                yaxis_title="Price ($)",
+                hovermode='x unified',
+                height=500,
+                template="plotly_white"
+            )
+            
+            st.plotly_chart(fig_ind, use_container_width=True)
+            
+        elif strategy == "momentum":
+            # Momentum Strategy
+            lookback = parameters.get('lookback', 10)
+            
+            # Calculate momentum
+            signals_df['returns'] = signals_df['close'].pct_change()
+            signals_df['momentum'] = signals_df['returns'].rolling(window=lookback).sum()
+            
+            # Create subplots
+            fig_ind = make_subplots(
+                rows=2, cols=1,
+                shared_xaxes=True,
+                vertical_spacing=0.1,
+                subplot_titles=(f'{ticker} Price', 'Momentum Indicator'),
+                row_heights=[0.7, 0.3]
+            )
+            
+            # Price chart
+            fig_ind.add_trace(go.Scatter(
+                x=signals_df['date'],
+                y=signals_df['close'],
+                mode='lines',
+                name='Close Price',
+                line=dict(color='black', width=2)
+            ), row=1, col=1)
+            
+            # Buy signals
+            buy_signals = signals_df[signals_df['signal'] == 'BUY']
+            if not buy_signals.empty:
+                fig_ind.add_trace(go.Scatter(
+                    x=buy_signals['date'],
+                    y=buy_signals['close'],
+                    mode='markers',
+                    name='Buy Signal',
+                    marker=dict(color='green', size=10, symbol='triangle-up')
+                ), row=1, col=1)
+            
+            # Sell signals
+            sell_signals = signals_df[signals_df['signal'] == 'SELL']
+            if not sell_signals.empty:
+                fig_ind.add_trace(go.Scatter(
+                    x=sell_signals['date'],
+                    y=sell_signals['close'],
+                    mode='markers',
+                    name='Sell Signal',
+                    marker=dict(color='red', size=10, symbol='triangle-down')
+                ), row=1, col=1)
+            
+            # Momentum indicator
+            fig_ind.add_trace(go.Scatter(
+                x=signals_df['date'],
+                y=signals_df['momentum'],
+                mode='lines',
+                name='Momentum',
+                line=dict(color='purple', width=2),
+                fill='tozeroy',
+                fillcolor='rgba(128, 0, 128, 0.2)'
+            ), row=2, col=1)
+            
+            # Zero line
+            fig_ind.add_hline(
+                y=0,
+                line_dash="dash",
+                line_color="gray",
+                row=2, col=1
+            )
+            
+            fig_ind.update_xaxes(title_text="Date", row=2, col=1)
+            fig_ind.update_yaxes(title_text="Price ($)", row=1, col=1)
+            fig_ind.update_yaxes(title_text="Momentum", row=2, col=1)
+            
+            fig_ind.update_layout(
+                height=600,
+                template="plotly_white",
+                showlegend=True,
+                hovermode='x unified'
+            )
+            
+            st.plotly_chart(fig_ind, use_container_width=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Returns Distribution
+        st.subheader("Returns Distribution")
+        
+        equity_curve_np = np.array(result['equity_curve'])
+        returns = np.diff(equity_curve_np) / equity_curve_np[:-1] * 100  # Daily returns in %
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Histogram
+            fig_hist = go.Figure()
+            
+            fig_hist.add_trace(go.Histogram(
+                x=returns,
+                nbinsx=30,
+                name='Returns',
+                marker_color='#1f77b4',
+                opacity=0.7
+            ))
+            
+            fig_hist.update_layout(
+                title="Daily Returns Distribution",
+                xaxis_title="Return (%)",
+                yaxis_title="Frequency",
+                height=350,
+                template="plotly_white",
+                showlegend=False
+            )
+            
+            st.plotly_chart(fig_hist, use_container_width=True)
+        
+        with col2:
+            # Statistics
+            st.markdown("**Distribution Statistics**")
+            st.write(f"- **Mean Return**: {np.mean(returns):.3f}%")
+            st.write(f"- **Median Return**: {np.median(returns):.3f}%")
+            st.write(f"- **Std Deviation**: {np.std(returns):.3f}%")
+            st.write(f"- **Skewness**: {pd.Series(returns).skew():.3f}")
+            st.write(f"- **Min Return**: {np.min(returns):.3f}%")
+            st.write(f"- **Max Return**: {np.max(returns):.3f}%")
+            
+            # Win/Loss statistics
+            positive_returns = returns[returns > 0]
+            negative_returns = returns[returns < 0]
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("**Win/Loss Analysis**")
+            st.write(f"- **Positive Days**: {len(positive_returns)} ({len(positive_returns)/len(returns)*100:.1f}%)")
+            st.write(f"- **Negative Days**: {len(negative_returns)} ({len(negative_returns)/len(returns)*100:.1f}%)")
+            st.write(f"- **Avg Positive**: {np.mean(positive_returns):.3f}%" if len(positive_returns) > 0 else "- **Avg Positive**: N/A")
+            st.write(f"- **Avg Negative**: {np.mean(negative_returns):.3f}%" if len(negative_returns) > 0 else "- **Avg Negative**: N/A")
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Monthly Returns Heatmap
+        st.subheader("Monthly Returns Heatmap")
+        
+        if not signals_df.empty and len(result['equity_curve']) == len(signals_df):
+            # Add portfolio values to signals_df
+            signals_df['portfolio_value'] = result['equity_curve']
+            signals_df['returns'] = signals_df['portfolio_value'].pct_change() * 100
+            
+            # Extract year and month
+            signals_df['year'] = signals_df['date'].dt.year
+            signals_df['month'] = signals_df['date'].dt.month
+            
+            # Calculate monthly returns
+            monthly_returns = signals_df.groupby(['year', 'month'])['returns'].sum().reset_index()
+            
+            if not monthly_returns.empty:
+                # Pivot for heatmap
+                heatmap_data = monthly_returns.pivot(index='year', columns='month', values='returns')
+                
+                # Month names
+                month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                              'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                
+                fig_heatmap = go.Figure(data=go.Heatmap(
+                    z=heatmap_data.values,
+                    x=[month_names[i-1] for i in heatmap_data.columns],
+                    y=heatmap_data.index,
+                    colorscale='RdYlGn',
+                    zmid=0,
+                    text=heatmap_data.values,
+                    texttemplate='%{text:.1f}%',
+                    textfont={"size": 10},
+                    colorbar=dict(title="Return (%)")
+                ))
+                
+                fig_heatmap.update_layout(
+                    title="Monthly Returns by Year",
+                    xaxis_title="Month",
+                    yaxis_title="Year",
+                    height=300,
+                    template="plotly_white"
+                )
+                
+                st.plotly_chart(fig_heatmap, use_container_width=True)
+            else:
+                st.info("Insufficient data for monthly returns heatmap")
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Trade Analysis
+        if result.get('trades'):
+            st.subheader("Trade Analysis")
+            
+            trades_df = pd.DataFrame(result['trades'])
+            
+            # Filter for completed trades (Buy-Sell pairs)
+            buy_trades = trades_df[trades_df['signal'].isin(['BUY'])].copy()
+            sell_trades = trades_df[trades_df['signal'].isin(['SELL', 'STOP_LOSS'])].copy()
+            
+            if not buy_trades.empty and not sell_trades.empty:
+                # Calculate trade durations and PnL
+                trade_analysis = []
+                for i in range(min(len(buy_trades), len(sell_trades))):
+                    buy_trade = buy_trades.iloc[i]
+                    sell_trade = sell_trades.iloc[i]
+                    
+                    duration = (pd.to_datetime(sell_trade['date']) - pd.to_datetime(buy_trade['date'])).days
+                    pnl = sell_trade.get('pnl', 0)
+                    
+                    trade_analysis.append({
+                        'duration': duration,
+                        'pnl': pnl,
+                        'is_win': pnl > 0,
+                        'entry_date': buy_trade['date'],
+                        'exit_date': sell_trade['date']
+                    })
+                
+                if trade_analysis:
+                    trade_df = pd.DataFrame(trade_analysis)
+                    
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        # Trade Duration Histogram
+                        fig_duration = go.Figure()
+                        
+                        fig_duration.add_trace(go.Histogram(
+                            x=trade_df['duration'],
+                            nbinsx=20,
+                            name='Trade Duration',
+                            marker_color='#ff7f0e',
+                            opacity=0.7
+                        ))
+                        
+                        fig_duration.update_layout(
+                            title="Trade Duration Distribution",
+                            xaxis_title="Days Held",
+                            yaxis_title="Number of Trades",
+                            height=350,
+                            template="plotly_white",
+                            showlegend=False
+                        )
+                        
+                        st.plotly_chart(fig_duration, use_container_width=True)
+                        
+                        # Duration stats
+                        st.markdown("**Duration Statistics**")
+                        st.write(f"- **Avg Duration**: {trade_df['duration'].mean():.1f} days")
+                        st.write(f"- **Median**: {trade_df['duration'].median():.0f} days")
+                        st.write(f"- **Min**: {trade_df['duration'].min():.0f} days")
+                        st.write(f"- **Max**: {trade_df['duration'].max():.0f} days")
+                    
+                    with col2:
+                        # PnL Scatter Plot
+                        fig_scatter = go.Figure()
+                        
+                        wins = trade_df[trade_df['is_win']]
+                        losses = trade_df[~trade_df['is_win']]
+                        
+                        if not wins.empty:
+                            fig_scatter.add_trace(go.Scatter(
+                                x=wins['duration'],
+                                y=wins['pnl'],
+                                mode='markers',
+                                name='Winning Trades',
+                                marker=dict(color='green', size=10, opacity=0.6)
+                            ))
+                        
+                        if not losses.empty:
+                            fig_scatter.add_trace(go.Scatter(
+                                x=losses['duration'],
+                                y=losses['pnl'],
+                                mode='markers',
+                                name='Losing Trades',
+                                marker=dict(color='red', size=10, opacity=0.6)
+                            ))
+                        
+                        fig_scatter.add_hline(y=0, line_dash="dash", line_color="gray")
+                        
+                        fig_scatter.update_layout(
+                            title="Trade PnL vs Duration",
+                            xaxis_title="Days Held",
+                            yaxis_title="Profit/Loss ($)",
+                            height=350,
+                            template="plotly_white"
+                        )
+                        
+                        st.plotly_chart(fig_scatter, use_container_width=True)
+                        
+                        # PnL stats
+                        st.markdown("**PnL Statistics**")
+                        st.write(f"- **Total Trades**: {len(trade_df)}")
+                        st.write(f"- **Winning Trades**: {len(wins)} ({len(wins)/len(trade_df)*100:.1f}%)")
+                        st.write(f"- **Avg Win**: ${wins['pnl'].mean():.2f}" if not wins.empty else "- **Avg Win**: N/A")
+                        st.write(f"- **Avg Loss**: ${losses['pnl'].mean():.2f}" if not losses.empty else "- **Avg Loss**: N/A")
+        
+    else:
+        st.info("Run a strategy first to see advanced analytics.")
+
+# Detailed Results Tab
+with tab3:
     st.header("Detailed Results")
     
     if 'backtest_result' in st.session_state:
@@ -740,14 +1373,14 @@ with tab2:
                 total_commission = trades_df['commission'].sum()
                 total_slippage = trades_df['slippage'].sum()
                 total_costs = total_commission + total_slippage
-                st.info(f"💰 Total Costs: Commission \${total_commission:.2f} + Slippage \${total_slippage:.2f} = \${total_costs:.2f}")
+                st.info(f"Total Costs: Commission \${total_commission:.2f} + Slippage \${total_slippage:.2f} = \${total_costs:.2f}")
             
             # Show risk-reward statistics for BUY trades (only if enabled)
             if show_risk_reward:
                 buy_trades = trades_df[trades_df['signal'] == 'BUY']
                 if not buy_trades.empty and 'risk_reward_ratio' in buy_trades.columns:
                     avg_rr = buy_trades['risk_reward_ratio'].mean()
-                    st.info(f"📊 Average Risk-Reward Ratio: {avg_rr:.2f}:1 (Higher is better)")
+                    st.info(f"Average Risk-Reward Ratio: {avg_rr:.2f}:1 (Higher is better)")
             
             # Format columns for display
             format_dict = {
@@ -792,27 +1425,77 @@ with tab2:
         st.info("Run a strategy first to see detailed results.")
 
 # History Tab
-with tab3:
+with tab4:
     st.header("Backtest History")
     
-    if st.button("Refresh History"):
-        try:
-            response = requests.get(f'{STRATEGY_SERVICE_URL}/results', timeout=10)
-            if response.status_code == 200:
-                st.session_state['history'] = response.json()['results']
-        except Exception as e:
-            st.error(f"Error fetching history: {str(e)}")
+    col1, col2 = st.columns([3, 1])
+    with col2:
+        if st.button("Refresh History", use_container_width=True):
+            try:
+                response = requests.get(f'{STRATEGY_SERVICE_URL}/results', timeout=10)
+                if response.status_code == 200:
+                    st.session_state['history'] = response.json()['results']
+                    st.success("History refreshed!")
+            except Exception as e:
+                st.error(f"Error fetching history: {str(e)}")
     
     if 'history' in st.session_state:
         history_df = pd.DataFrame(st.session_state['history'])
         
         if not history_df.empty:
+            # Add some metrics at the top
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Total Backtests", len(history_df))
+            with col2:
+                avg_return = history_df['total_return'].mean() if 'total_return' in history_df.columns else 0
+                st.metric("Avg Return", f"{avg_return:.2f}%")
+            with col3:
+                avg_sharpe = history_df['sharpe_ratio'].mean() if 'sharpe_ratio' in history_df.columns else 0
+                st.metric("Avg Sharpe", f"{avg_sharpe:.2f}")
+            with col4:
+                best_return = history_df['total_return'].max() if 'total_return' in history_df.columns else 0
+                st.metric("Best Return", f"{best_return:.2f}%")
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # Display history table
+            display_columns = ['id', 'ticker', 'strategy', 'total_return', 'sharpe_ratio', 'max_drawdown', 'created_at']
+            available_columns = [col for col in display_columns if col in history_df.columns]
+            
             st.dataframe(
-                history_df[['id', 'ticker', 'strategy', 'total_return', 'sharpe_ratio', 'created_at']],
-                use_container_width=True
+                history_df[available_columns].sort_values(by='id', ascending=False),
+                use_container_width=True,
+                height=400
             )
+            
+            # Performance comparison chart
+            if len(history_df) > 1 and 'total_return' in history_df.columns:
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.subheader("Performance Comparison")
+                
+                fig_comp = go.Figure()
+                
+                fig_comp.add_trace(go.Bar(
+                    x=[f"{row['ticker']}-{row['strategy']}" for _, row in history_df.iterrows()],
+                    y=history_df['total_return'],
+                    marker_color=['green' if x > 0 else 'red' for x in history_df['total_return']],
+                    text=history_df['total_return'].round(2),
+                    textposition='outside'
+                ))
+                
+                fig_comp.update_layout(
+                    title="Returns Across All Backtests",
+                    xaxis_title="Backtest",
+                    yaxis_title="Total Return (%)",
+                    height=400,
+                    template="plotly_white",
+                    showlegend=False
+                )
+                
+                st.plotly_chart(fig_comp, use_container_width=True)
         else:
-            st.info("No backtest history available yet.")
+            st.info("No backtest history available yet. Run some strategies to see them here!")
     else:
         st.info("Click 'Refresh History' to load previous backtests.")
 
@@ -820,7 +1503,7 @@ with tab3:
 st.markdown("---")
 st.markdown(
     "<div style='text-align: center; color: gray;'>"
-    "AQTS - Automated Quant Trading Strategy Platform | "
+    "AQUA - Automated Quantitative Unified Analyst | "
     "For simulation and educational purposes only | "
     "© 2025"
     "</div>",

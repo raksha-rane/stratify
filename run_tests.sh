@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# AQTS Test Runner Script
+# AQUA Test Runner Script
 # Runs all tests for the platform
 
 set -e
 
-echo "🧪 AQTS Test Suite"
+echo "🧪 AQUA Test Suite"
 echo "=================="
 echo ""
 

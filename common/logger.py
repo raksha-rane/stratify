@@ -1,5 +1,5 @@
 """
-Structured Logging Module for AQTS
+Structured Logging Module for AQUA
 Provides JSON and pretty-formatted logging with rotation
 """
 import logging

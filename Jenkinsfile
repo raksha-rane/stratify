@@ -3,7 +3,7 @@ pipeline {
     
     environment {
         DOCKER_COMPOSE_VERSION = '2.23.0'
-        PROJECT_NAME = 'aqts'
+        PROJECT_NAME = 'aqua'
     }
     
     stages {

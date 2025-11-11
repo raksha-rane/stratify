@@ -1,6 +1,6 @@
 # Common Utilities Module
 
-Shared utilities and components used across all AQTS services.
+Shared utilities and components used across all AQUA services.
 
 ## Modules
 

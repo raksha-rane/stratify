@@ -1,5 +1,5 @@
 """
-Error Handling Middleware for AQTS Platform
+Error Handling Middleware for AQUA
 
 This module provides:
 - Custom exception classes for different error types
