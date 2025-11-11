@@ -405,8 +405,13 @@ if run_strategy_btn:
                             'end_date': end_date.strftime('%Y-%m-%d'),
                             'parameters': parameters,
                             'initial_capital': initial_capital,
+                            'enable_risk_management': enable_risk_mgmt,
                             'use_kelly': use_kelly,
-                            'enable_stop_loss': enable_stop_loss
+                            'enable_stop_loss': enable_stop_loss,
+                            'stop_loss_pct': stop_loss_pct,
+                            'commission': commission,
+                            'slippage': slippage,
+                            'max_position_pct': max_position_pct
                         },
                         headers={'X-Correlation-ID': correlation_id},
                         timeout=60

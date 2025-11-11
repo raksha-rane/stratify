@@ -206,7 +206,7 @@ class MomentumStrategy(TradingStrategy):
         return self.data
 
 
-def run_backtest(data, initial_capital=10000, enable_risk_management=True, use_kelly=False, enable_stop_loss=True, stop_loss_pct=0.05):
+def run_backtest(data, initial_capital=10000, enable_risk_management=True, use_kelly=False, enable_stop_loss=True, stop_loss_pct=0.05, commission=0.001, slippage=0.0005, max_position_pct=0.95):
     """
     Run backtest on strategy signals with risk management
     
@@ -217,15 +217,18 @@ def run_backtest(data, initial_capital=10000, enable_risk_management=True, use_k
         use_kelly: Whether to use Kelly Criterion for position sizing (after 10+ trades)
         enable_stop_loss: Whether to enable automatic stop-loss
         stop_loss_pct: Stop loss percentage (e.g., 0.05 for 5%)
+        commission: Commission per trade as decimal (e.g., 0.001 for 0.1%)
+        slippage: Slippage per trade as decimal (e.g., 0.0005 for 0.05%)
+        max_position_pct: Maximum portfolio percentage in single position (e.g., 0.95 for 95%)
     
     Returns:
         Dictionary with backtest results and metrics
     """
-    # Initialize risk manager
+    # Initialize risk manager with custom parameters
     risk_mgr = RiskManager(
-        commission=0.001,           # 0.1% per trade
-        slippage=0.0005,            # 0.05% slippage
-        max_position_pct=0.95,      # Max 95% invested (keep some cash)
+        commission=commission,
+        slippage=slippage,
+        max_position_pct=max_position_pct,
         max_risk_per_trade=0.02,    # Max 2% risk per trade
         min_position_value=100.0    # Minimum $100 position
     )
@@ -251,6 +254,9 @@ def run_backtest(data, initial_capital=10000, enable_risk_management=True, use_k
         'enable_risk_management': enable_risk_management,
         'use_kelly': use_kelly,
         'enable_stop_loss': enable_stop_loss,
+        'commission': commission,
+        'slippage': slippage,
+        'max_position_pct': max_position_pct,
         'data_records': len(data)
     })
     
@@ -866,9 +872,15 @@ def run_strategy():
         result_df = strategy.calculate_signals()
         
         # Get advanced parameters
+        enable_risk_management = data.get('enable_risk_management', True)
         use_kelly = data.get('use_kelly', False)
         enable_stop_loss = data.get('enable_stop_loss', True)
         stop_loss_pct = data.get('stop_loss_pct', DEFAULT_STOP_LOSS_PCT)
+        
+        # Get custom risk parameters
+        commission = data.get('commission', 0.001)
+        slippage = data.get('slippage', 0.0005)
+        max_position_pct = data.get('max_position_pct', 0.95)
         
         # Validate stop loss percentage
         if not (MIN_STOP_LOSS_PCT <= stop_loss_pct <= MAX_STOP_LOSS_PCT):
@@ -876,15 +888,23 @@ def run_strategy():
         
         # Run backtest
         logger.debug("Running backtest simulation", extra={
+            'enable_risk_management': enable_risk_management,
             'use_kelly': use_kelly,
-            'enable_stop_loss': enable_stop_loss
+            'enable_stop_loss': enable_stop_loss,
+            'commission': commission,
+            'slippage': slippage,
+            'max_position_pct': max_position_pct
         })
         backtest_results = run_backtest(
             result_df, 
             initial_capital,
+            enable_risk_management=enable_risk_management,
             use_kelly=use_kelly,
             enable_stop_loss=enable_stop_loss,
-            stop_loss_pct=stop_loss_pct
+            stop_loss_pct=stop_loss_pct,
+            commission=commission,
+            slippage=slippage,
+            max_position_pct=max_position_pct
         )
         
         logger.info("Backtest completed", extra={
